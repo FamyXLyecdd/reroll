@@ -36,15 +36,14 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 # ============================================================
 
 DEFAULT_PASSWORD = "Qing762.chy"
-HEADLESS = True  # Must be True for Termux (no display)
+HEADLESS = False  # Non-headless so NopeCHA extension works (needs VNC)
 
-# CAPTCHA API - Use one of these services
-# Get key from: https://capsolver.com or https://2captcha.com
-CAPSOLVER_API_KEY = ""  # CapSolver key (recommended for FunCaptcha)
-TWOCAPTCHA_API_KEY = ""  # 2Captcha key (alternative)
+# CAPTCHA - NopeCHA extension works in non-headless mode
+NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"
 
-# NopeCHA only works with browser extension, not headless API for FunCaptcha
-NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"  # Only works with extension
+# Backup: CapSolver/2Captcha for headless mode
+CAPSOLVER_API_KEY = ""
+TWOCAPTCHA_API_KEY = ""
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1457625547801886875/Lm5iwIsEoIOaiEJ2FuHQdR9fHsehYCYZNOax_zrz9GgZSEv5299miWPqGlK-xvZsQb-m"
 
