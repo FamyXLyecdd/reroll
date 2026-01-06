@@ -36,7 +36,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 # ============================================================
 
 DEFAULT_PASSWORD = "Qing762.chy"
-HEADLESS = False  # Set to True for headless mode (no display needed)
+HEADLESS = True  # Must be True for Termux (no display)
 NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"  # Your NopeCHA API key
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1457625547801886875/Lm5iwIsEoIOaiEJ2FuHQdR9fHsehYCYZNOax_zrz9GgZSEv5299miWPqGlK-xvZsQb-m"
