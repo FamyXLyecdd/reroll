@@ -318,32 +318,52 @@ class RobloxCreator:
             return False
         
         try:
-            # Find FunCaptcha public key from page
+            # Roblox uses a known FunCaptcha public key
+            # Try known Roblox keys first
+            roblox_keys = [
+                "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F",  # Roblox signup
+                "63E4117F-E727-42B4-6DAA-C8448E9B137F",  # Roblox login
+                "476068BF-9607-4799-B53D-966BE98E2B81",  # Roblox general
+            ]
+            
             page_source = self.driver.page_source
             
-            # Look for Arkose/FunCaptcha
+            # Try to find key in page
             import re
-            pk_match = re.search(r'public[_-]?key["\s:=]+["\']?([A-F0-9-]{36})', page_source, re.IGNORECASE)
+            public_key = None
             
-            if not pk_match:
-                # Try to find in network or iframe
-                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-                for iframe in iframes:
-                    src = iframe.get_attribute("src") or ""
-                    if "arkoselabs" in src or "funcaptcha" in src:
-                        pk_match = re.search(r'pk=([A-F0-9-]{36})', src, re.IGNORECASE)
-                        if pk_match:
-                            break
+            # Check iframes for Arkose
+            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+            for iframe in iframes:
+                src = iframe.get_attribute("src") or ""
+                if "arkoselabs" in src or "funcaptcha" in src:
+                    pk_match = re.search(r'pk=([A-F0-9-]{36})', src, re.IGNORECASE)
+                    if pk_match:
+                        public_key = pk_match.group(1)
+                        break
             
-            if not pk_match:
-                print("Could not find FunCaptcha public key")
-                return False
+            # Check page source
+            if not public_key:
+                for pattern in [
+                    r'data-pkey="([A-F0-9-]{36})"',
+                    r'public[_-]?key["\s:=]+["\']?([A-F0-9-]{36})',
+                    r'"pk":"([A-F0-9-]{36})"',
+                    r'publicKey["\s:=]+["\']?([A-F0-9-]{36})',
+                ]:
+                    match = re.search(pattern, page_source, re.IGNORECASE)
+                    if match:
+                        public_key = match.group(1)
+                        break
             
-            public_key = pk_match.group(1)
-            print(f"Found FunCaptcha key: {public_key[:8]}...")
+            # Use known Roblox key as fallback
+            if not public_key:
+                public_key = roblox_keys[0]
+                print(f"Using known Roblox key: {public_key[:8]}...")
+            else:
+                print(f"Found FunCaptcha key: {public_key[:8]}...")
             
             # Request solve from NopeCHA
-            print("Requesting CAPTCHA solution from NopeCHA...")
+            print("Requesting CAPTCHA solution from NopeCHA API...")
             resp = requests.post(
                 "https://api.nopecha.com/",
                 json={
@@ -360,9 +380,11 @@ class RobloxCreator:
                 return False
             
             data = resp.json()
+            print(f"NopeCHA response: {data}")
             
             if "error" in data:
-                print(f"NopeCHA error: {data.get('error')}")
+                error_msg = data.get('message', data.get('error'))
+                print(f"NopeCHA error: {error_msg}")
                 return False
             
             # Poll for solution
@@ -372,8 +394,9 @@ class RobloxCreator:
                 return False
             
             print("Waiting for CAPTCHA solution...")
-            for _ in range(60):  # Max 2 minutes
+            for i in range(60):  # Max 2 minutes
                 time.sleep(2)
+                print(f"  Polling... ({i*2}s)")
                 
                 poll_resp = requests.post(
                     "https://api.nopecha.com/",
