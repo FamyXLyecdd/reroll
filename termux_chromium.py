@@ -37,9 +37,19 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 DEFAULT_PASSWORD = "Qing762.chy"
 HEADLESS = True  # Must be True for Termux (no display)
-NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"  # Your NopeCHA API key
+
+# CAPTCHA API - Use one of these services
+# Get key from: https://capsolver.com or https://2captcha.com
+CAPSOLVER_API_KEY = ""  # CapSolver key (recommended for FunCaptcha)
+TWOCAPTCHA_API_KEY = ""  # 2Captcha key (alternative)
+
+# NopeCHA only works with browser extension, not headless API for FunCaptcha
+NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"  # Only works with extension
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1457625547801886875/Lm5iwIsEoIOaiEJ2FuHQdR9fHsehYCYZNOax_zrz9GgZSEv5299miWPqGlK-xvZsQb-m"
+
+# Roblox FunCaptcha Public Key
+ROBLOX_FUNCAPTCHA_KEY = "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F"
 
 # Webhook proxies (Discord blocks direct Roblox requests)
 WEBHOOK_PROXIES = [
@@ -312,133 +322,182 @@ class RobloxCreator:
         return gen.generate()
     
     def solve_captcha_nopecha(self):
-        """Solve FunCaptcha using NopeCHA API"""
-        if not NOPECHA_API_KEY:
-            print("No NopeCHA API key - cannot solve CAPTCHA")
-            return False
+        """Solve FunCaptcha using CapSolver or 2Captcha API"""
         
+        # Try CapSolver first
+        if CAPSOLVER_API_KEY:
+            print("Using CapSolver API...")
+            result = self.solve_with_capsolver()
+            if result:
+                return result
+        
+        # Try 2Captcha
+        if TWOCAPTCHA_API_KEY:
+            print("Using 2Captcha API...")
+            result = self.solve_with_2captcha()
+            if result:
+                return result
+        
+        print("No CAPTCHA API key configured!")
+        print("Get a key from: https://capsolver.com or https://2captcha.com")
+        return False
+    
+    def solve_with_capsolver(self):
+        """Solve FunCaptcha with CapSolver"""
         try:
-            # Roblox uses a known FunCaptcha public key
-            # Try known Roblox keys first
-            roblox_keys = [
-                "A2A14B1D-1AF3-C791-9BBC-EE33CC7A0A6F",  # Roblox signup
-                "63E4117F-E727-42B4-6DAA-C8448E9B137F",  # Roblox login
-                "476068BF-9607-4799-B53D-966BE98E2B81",  # Roblox general
-            ]
-            
-            page_source = self.driver.page_source
-            
-            # Try to find key in page
-            import re
-            public_key = None
-            
-            # Check iframes for Arkose
-            iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-            for iframe in iframes:
-                src = iframe.get_attribute("src") or ""
-                if "arkoselabs" in src or "funcaptcha" in src:
-                    pk_match = re.search(r'pk=([A-F0-9-]{36})', src, re.IGNORECASE)
-                    if pk_match:
-                        public_key = pk_match.group(1)
-                        break
-            
-            # Check page source
-            if not public_key:
-                for pattern in [
-                    r'data-pkey="([A-F0-9-]{36})"',
-                    r'public[_-]?key["\s:=]+["\']?([A-F0-9-]{36})',
-                    r'"pk":"([A-F0-9-]{36})"',
-                    r'publicKey["\s:=]+["\']?([A-F0-9-]{36})',
-                ]:
-                    match = re.search(pattern, page_source, re.IGNORECASE)
-                    if match:
-                        public_key = match.group(1)
-                        break
-            
-            # Use known Roblox key as fallback
-            if not public_key:
-                public_key = roblox_keys[0]
-                print(f"Using known Roblox key: {public_key[:8]}...")
-            else:
-                print(f"Found FunCaptcha key: {public_key[:8]}...")
-            
-            # Request solve from NopeCHA
-            print("Requesting CAPTCHA solution from NopeCHA API...")
+            # Create task
             resp = requests.post(
-                "https://api.nopecha.com/",
+                "https://api.capsolver.com/createTask",
                 json={
-                    "key": NOPECHA_API_KEY,
-                    "type": "funcaptcha",
-                    "sitekey": public_key,
-                    "url": self.driver.current_url
+                    "clientKey": CAPSOLVER_API_KEY,
+                    "task": {
+                        "type": "FunCaptchaTaskProxyLess",
+                        "websiteURL": self.driver.current_url,
+                        "websitePublicKey": ROBLOX_FUNCAPTCHA_KEY,
+                    }
                 },
                 timeout=30
             )
             
-            if resp.status_code != 200:
-                print(f"NopeCHA API error: {resp.status_code}")
-                return False
-            
             data = resp.json()
-            print(f"NopeCHA response: {data}")
-            
-            if "error" in data:
-                error_msg = data.get('message', data.get('error'))
-                print(f"NopeCHA error: {error_msg}")
+            if data.get("errorId") != 0:
+                print(f"CapSolver error: {data.get('errorDescription')}")
                 return False
             
-            # Poll for solution
-            request_id = data.get("data")
-            if not request_id:
-                print("No request ID from NopeCHA")
-                return False
+            task_id = data.get("taskId")
+            print(f"CapSolver task created: {task_id}")
             
-            print("Waiting for CAPTCHA solution...")
-            for i in range(60):  # Max 2 minutes
-                time.sleep(2)
-                print(f"  Polling... ({i*2}s)")
+            # Poll for result
+            for i in range(60):
+                time.sleep(3)
+                print(f"  Waiting for solution... ({i*3}s)")
                 
-                poll_resp = requests.post(
-                    "https://api.nopecha.com/",
+                result = requests.post(
+                    "https://api.capsolver.com/getTaskResult",
                     json={
-                        "key": NOPECHA_API_KEY,
-                        "id": request_id
+                        "clientKey": CAPSOLVER_API_KEY,
+                        "taskId": task_id
                     },
                     timeout=30
-                )
+                ).json()
                 
-                poll_data = poll_resp.json()
+                if result.get("status") == "ready":
+                    token = result.get("solution", {}).get("token")
+                    if token:
+                        print("CAPTCHA solved!")
+                        return self.inject_captcha_token(token)
                 
-                if "error" in poll_data:
-                    if poll_data.get("error") == 1:  # Still processing
-                        continue
-                    print(f"NopeCHA poll error: {poll_data}")
+                if result.get("errorId") != 0:
+                    print(f"CapSolver error: {result.get('errorDescription')}")
                     return False
-                
-                if "data" in poll_data:
-                    token = poll_data["data"]
-                    print("CAPTCHA solved! Injecting token...")
-                    
-                    # Inject the token
-                    self.driver.execute_script(f'''
-                        var callback = window.ArkoseEnforcement && window.ArkoseEnforcement.callback;
-                        if (callback) callback("{token}");
-                        
-                        // Try other methods
-                        var inputs = document.querySelectorAll('input[name*="captcha"], input[name*="token"], input[name*="fc-token"]');
-                        inputs.forEach(function(input) {{ input.value = "{token}"; }});
-                        
-                        // Dispatch events
-                        document.dispatchEvent(new CustomEvent('FunCaptchaCallback', {{detail: {{token: "{token}"}}}}));
-                    ''')
-                    
-                    return True
             
-            print("CAPTCHA solve timeout")
+            print("CapSolver timeout")
             return False
             
         except Exception as e:
-            print(f"Error solving CAPTCHA: {e}")
+            print(f"CapSolver error: {e}")
+            return False
+    
+    def solve_with_2captcha(self):
+        """Solve FunCaptcha with 2Captcha"""
+        try:
+            # Submit task
+            resp = requests.post(
+                "http://2captcha.com/in.php",
+                data={
+                    "key": TWOCAPTCHA_API_KEY,
+                    "method": "funcaptcha",
+                    "publickey": ROBLOX_FUNCAPTCHA_KEY,
+                    "surl": "https://roblox-api.arkoselabs.com",
+                    "pageurl": self.driver.current_url,
+                    "json": 1
+                },
+                timeout=30
+            )
+            
+            data = resp.json()
+            if data.get("status") != 1:
+                print(f"2Captcha error: {data.get('request')}")
+                return False
+            
+            request_id = data.get("request")
+            print(f"2Captcha task: {request_id}")
+            
+            # Poll for result
+            for i in range(60):
+                time.sleep(5)
+                print(f"  Waiting for solution... ({i*5}s)")
+                
+                result = requests.get(
+                    f"http://2captcha.com/res.php?key={TWOCAPTCHA_API_KEY}&action=get&id={request_id}&json=1",
+                    timeout=30
+                ).json()
+                
+                if result.get("status") == 1:
+                    token = result.get("request")
+                    if token:
+                        print("CAPTCHA solved!")
+                        return self.inject_captcha_token(token)
+                
+                if result.get("request") not in ["CAPCHA_NOT_READY", "CAPTCHA_NOT_READY"]:
+                    print(f"2Captcha error: {result.get('request')}")
+                    return False
+            
+            print("2Captcha timeout")
+            return False
+            
+        except Exception as e:
+            print(f"2Captcha error: {e}")
+            return False
+    
+    def inject_captcha_token(self, token):
+        """Inject solved CAPTCHA token into page"""
+        try:
+            # Try multiple injection methods
+            self.driver.execute_script(f'''
+                // Method 1: Arkose callback
+                if (window.ArkoseEnforcement) {{
+                    window.ArkoseEnforcement.setConfig({{solved: true}});
+                }}
+                
+                // Method 2: Hidden input
+                var inputs = document.querySelectorAll('input[name*="fc-token"], input[name*="captcha"]');
+                inputs.forEach(function(input) {{ input.value = "{token}"; }});
+                
+                // Method 3: Window variable
+                window.funcaptchaToken = "{token}";
+                
+                // Method 4: Trigger callback  
+                if (typeof onFunCaptchaSolved === 'function') {{
+                    onFunCaptchaSolved("{token}");
+                }}
+                
+                // Method 5: Dispatch event
+                document.dispatchEvent(new CustomEvent('FunCaptchaCallback', {{detail: {{token: "{token}"}}}}));
+                
+                // Method 6: Submit form with token
+                var form = document.querySelector('form');
+                if (form) {{
+                    var hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = 'fc-token';
+                    hiddenInput.value = "{token}";
+                    form.appendChild(hiddenInput);
+                }}
+            ''')
+            
+            time.sleep(2)
+            
+            # Click signup again
+            try:
+                signup_btn = self.driver.find_element(By.ID, "signup-button")
+                signup_btn.click()
+            except:
+                pass
+            
+            return True
+        except Exception as e:
+            print(f"Token injection error: {e}")
             return False
     
     def create_account(self, password=DEFAULT_PASSWORD, email_obj=None):
@@ -451,9 +510,6 @@ class RobloxCreator:
         print(f"Creating account: {username}")
         
         try:
-            # Setup NopeCHA API (no extension needed)
-            print("Using NopeCHA API for CAPTCHA solving")
-            
             # Navigate to signup page
             self.driver.get("https://www.roblox.com/CreateAccount")
             wait = WebDriverWait(self.driver, 30)
