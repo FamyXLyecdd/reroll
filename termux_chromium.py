@@ -36,7 +36,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 # ============================================================
 
 DEFAULT_PASSWORD = "Qing762.chy"
-HEADLESS = True  # Set to False if you want to see the browser (needs display)
+HEADLESS = False  # Set to True for headless mode (no display needed)
 NOPECHA_API_KEY = "wlc9fkgvfvmoymzg"  # Your NopeCHA API key
 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1457625547801886875/Lm5iwIsEoIOaiEJ2FuHQdR9fHsehYCYZNOax_zrz9GgZSEv5299miWPqGlK-xvZsQb-m"
@@ -235,22 +235,25 @@ class RobloxCreator:
         """Initialize Chromium WebDriver"""
         options = Options()
         
+        # Headless or not
+        if HEADLESS:
+            options.add_argument("--headless")
+        
         # Required for proot/container environment
-        options.add_argument("--headless")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--disable-extensions")
         options.add_argument("--window-size=1920,1080")
         options.add_argument("--lang=en-US")
         options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         
-        # NopeCHA extension (if available)
-        nopecha_path = os.path.join(os.path.dirname(__file__), "NopeCHA")
-        if os.path.exists(nopecha_path) and NOPECHA_API_KEY:
-            options.add_argument(f"--load-extension={nopecha_path}")
-            print(f"NopeCHA extension loaded from {nopecha_path}")
+        # Load NopeCHA extension (only works in non-headless mode)
+        if not HEADLESS and NOPECHA_API_KEY:
+            nopecha_path = os.path.join(os.path.dirname(__file__), "lib", "NopeCHA")
+            if os.path.exists(nopecha_path):
+                options.add_argument(f"--load-extension={nopecha_path}")
+                print(f"NopeCHA extension loaded from {nopecha_path}")
         
         # Try to find chromedriver
         chromedriver_paths = [
