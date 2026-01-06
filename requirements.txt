@@ -1,0 +1,7 @@
+DrissionPage==4.1.1.2
+pymailtm==1.1.1
+pyperclip==1.9.0
+Requests==2.32.5
+tqdm==4.67.1
+rich==14.2.0
+pyinstaller==6.17.0

@@ -1,0 +1,5 @@
+# Termux Requirements
+# Install these in Termux with: pip install -r requirements_termux.txt
+
+selenium
+requests
